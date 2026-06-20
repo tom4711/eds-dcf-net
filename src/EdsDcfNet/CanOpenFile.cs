@@ -19,9 +19,16 @@ using System.Globalization;
 /// preserve non-ASCII content while remaining ASCII-compatible for 7-bit data.
 /// The corresponding <c>Write*ToString</c> overloads return a .NET <see cref="string"/>,
 /// so BOM and byte-level encoding do not apply.
+/// For EDS-specific operations with shared options, prefer <see cref="Eds"/>.
 /// </remarks>
 public static class CanOpenFile
 {
+    /// <summary>
+    /// EDS read/write operations. Prefer this entry point for new code that needs
+    /// <see cref="CanOpenFileOptions"/> instead of additional <see cref="CanOpenFile"/> overloads.
+    /// </summary>
+    public static EdsCanOpenOperations Eds { get; } = EdsCanOpenOperations.Instance;
+
     /// <summary>
     /// Validates an Electronic Data Sheet (EDS) model using the full
     /// <see cref="CanOpenModelValidator"/> rule set.
@@ -108,10 +115,7 @@ public static class CanOpenFile
     public static ElectronicDataSheet ReadEds(
         string filePath,
         long maxInputSize = ReaderDefaults.DefaultMaxInputSize)
-    {
-        var reader = new EdsReader();
-        return reader.ReadFile(filePath, maxInputSize);
-    }
+        => Eds.ReadFile(filePath, new CanOpenFileOptions { MaxInputSize = maxInputSize });
 
     /// <summary>
     /// Reads an Electronic Data Sheet (EDS) file asynchronously.
@@ -122,10 +126,7 @@ public static class CanOpenFile
     public static Task<ElectronicDataSheet> ReadEdsAsync(
         string filePath,
         CancellationToken cancellationToken = default)
-    {
-        var reader = new EdsReader();
-        return reader.ReadFileAsync(filePath, cancellationToken);
-    }
+        => Eds.ReadFileAsync(filePath, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Reads an Electronic Data Sheet (EDS) file asynchronously.
@@ -138,10 +139,7 @@ public static class CanOpenFile
         string filePath,
         long maxInputSize,
         CancellationToken cancellationToken = default)
-    {
-        var reader = new EdsReader();
-        return reader.ReadFileAsync(filePath, maxInputSize, cancellationToken);
-    }
+        => Eds.ReadFileAsync(filePath, new CanOpenFileOptions { MaxInputSize = maxInputSize }, cancellationToken);
 
     /// <summary>
     /// Reads an Electronic Data Sheet (EDS) from a string.
@@ -152,10 +150,7 @@ public static class CanOpenFile
     public static ElectronicDataSheet ReadEdsFromString(
         string content,
         long maxInputSize = ReaderDefaults.DefaultMaxInputSize)
-    {
-        var reader = new EdsReader();
-        return reader.ReadString(content, maxInputSize);
-    }
+        => Eds.ReadString(content, new CanOpenFileOptions { MaxInputSize = maxInputSize });
 
     /// <summary>
     /// Reads an Electronic Data Sheet (EDS) from a stream.
@@ -167,10 +162,7 @@ public static class CanOpenFile
     public static ElectronicDataSheet ReadEds(
         Stream stream,
         long maxInputSize = ReaderDefaults.DefaultMaxInputSize)
-    {
-        var reader = new EdsReader();
-        return reader.ReadStream(stream, maxInputSize);
-    }
+        => Eds.ReadStream(stream, new CanOpenFileOptions { MaxInputSize = maxInputSize });
 
     /// <summary>
     /// Reads an Electronic Data Sheet (EDS) from a stream asynchronously.
@@ -182,10 +174,7 @@ public static class CanOpenFile
     public static Task<ElectronicDataSheet> ReadEdsAsync(
         Stream stream,
         CancellationToken cancellationToken = default)
-    {
-        var reader = new EdsReader();
-        return reader.ReadStreamAsync(stream, cancellationToken);
-    }
+        => Eds.ReadStreamAsync(stream, cancellationToken: cancellationToken);
 
     /// <summary>
     /// Reads an Electronic Data Sheet (EDS) from a stream asynchronously.
@@ -199,10 +188,7 @@ public static class CanOpenFile
         Stream stream,
         long maxInputSize,
         CancellationToken cancellationToken = default)
-    {
-        var reader = new EdsReader();
-        return reader.ReadStreamAsync(stream, maxInputSize, cancellationToken);
-    }
+        => Eds.ReadStreamAsync(stream, new CanOpenFileOptions { MaxInputSize = maxInputSize }, cancellationToken);
 
     #endregion
 
@@ -236,8 +222,7 @@ public static class CanOpenFile
     public static void WriteEds(ElectronicDataSheet eds, string filePath, CanOpenWriteOptions? options)
     {
         EnsureValidEdsForWrite(eds, options);
-        var writer = new EdsWriter();
-        writer.WriteFile(eds, filePath);
+        Eds.WriteFile(eds, filePath);
     }
 
     /// <summary>
@@ -263,8 +248,7 @@ public static class CanOpenFile
     public static void WriteEds(ElectronicDataSheet eds, Stream stream, CanOpenWriteOptions? options)
     {
         EnsureValidEdsForWrite(eds, options);
-        var writer = new EdsWriter();
-        writer.WriteStream(eds, stream);
+        Eds.WriteStream(eds, stream);
     }
 
     /// <summary>
@@ -297,8 +281,7 @@ public static class CanOpenFile
         CancellationToken cancellationToken = default)
     {
         EnsureValidEdsForWrite(eds, options);
-        var writer = new EdsWriter();
-        return writer.WriteFileAsync(eds, filePath, cancellationToken);
+        return Eds.WriteFileAsync(eds, filePath, cancellationToken);
     }
 
     /// <summary>
@@ -333,8 +316,7 @@ public static class CanOpenFile
         CancellationToken cancellationToken = default)
     {
         EnsureValidEdsForWrite(eds, options);
-        var writer = new EdsWriter();
-        return writer.WriteStreamAsync(eds, stream, cancellationToken);
+        return Eds.WriteStreamAsync(eds, stream, cancellationToken);
     }
 
     /// <summary>
@@ -358,8 +340,7 @@ public static class CanOpenFile
     public static string WriteEdsToString(ElectronicDataSheet eds, CanOpenWriteOptions? options)
     {
         EnsureValidEdsForWrite(eds, options);
-        var writer = new EdsWriter();
-        return writer.GenerateString(eds);
+        return Eds.WriteToString(eds);
     }
 
     #endregion
