@@ -35,13 +35,24 @@ public static class CanOpenModelValidator
     {
         ThrowIfNull(eds, nameof(eds));
 
-        var issues = new List<ValidationIssue>();
-        ValidateDeviceInfo(eds.DeviceInfo, issues);
-        ValidateObjectDictionary(eds.ObjectDictionary, issues);
-        if (eds.ApplicationProcess != null)
-            ValidateApplicationProcess(eds.ApplicationProcess, "ApplicationProcess", issues);
+        return ValidateEdsCore(eds, CancellationToken.None);
+    }
 
-        return new ReadOnlyCollection<ValidationIssue>(issues);
+    /// <summary>
+    /// Validates an <see cref="ElectronicDataSheet"/> instance asynchronously on a
+    /// thread-pool thread with cooperative cancellation.
+    /// </summary>
+    /// <param name="eds">Model instance to validate.</param>
+    /// <param name="cancellationToken">Token observed at iteration boundaries during validation.</param>
+    /// <returns>List of validation issues. Empty when model is valid.</returns>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is canceled.</exception>
+    public static Task<IReadOnlyList<ValidationIssue>> ValidateAsync(
+        ElectronicDataSheet eds,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfNull(eds, nameof(eds));
+
+        return Task.Run<IReadOnlyList<ValidationIssue>>(() => ValidateEdsCore(eds, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -53,14 +64,24 @@ public static class CanOpenModelValidator
     {
         ThrowIfNull(dcf, nameof(dcf));
 
-        var issues = new List<ValidationIssue>();
-        ValidateDeviceInfo(dcf.DeviceInfo, issues);
-        ValidateObjectDictionary(dcf.ObjectDictionary, issues);
-        ValidateDeviceCommissioning(dcf.DeviceCommissioning, issues);
-        if (dcf.ApplicationProcess != null)
-            ValidateApplicationProcess(dcf.ApplicationProcess, "ApplicationProcess", issues);
+        return ValidateDcfCore(dcf, CancellationToken.None);
+    }
 
-        return new ReadOnlyCollection<ValidationIssue>(issues);
+    /// <summary>
+    /// Validates a <see cref="DeviceConfigurationFile"/> instance asynchronously on a
+    /// thread-pool thread with cooperative cancellation.
+    /// </summary>
+    /// <param name="dcf">Model instance to validate.</param>
+    /// <param name="cancellationToken">Token observed at iteration boundaries during validation.</param>
+    /// <returns>List of validation issues. Empty when model is valid.</returns>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is canceled.</exception>
+    public static Task<IReadOnlyList<ValidationIssue>> ValidateAsync(
+        DeviceConfigurationFile dcf,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfNull(dcf, nameof(dcf));
+
+        return Task.Run<IReadOnlyList<ValidationIssue>>(() => ValidateDcfCore(dcf, cancellationToken), cancellationToken);
     }
 
     /// <summary>
@@ -72,10 +93,79 @@ public static class CanOpenModelValidator
     {
         ThrowIfNull(cpj, nameof(cpj));
 
+        return ValidateCpjCore(cpj, CancellationToken.None);
+    }
+
+    /// <summary>
+    /// Validates a <see cref="NodelistProject"/> instance asynchronously on a
+    /// thread-pool thread with cooperative cancellation.
+    /// </summary>
+    /// <param name="cpj">Model instance to validate.</param>
+    /// <param name="cancellationToken">Token observed at iteration boundaries during validation.</param>
+    /// <returns>List of validation issues. Empty when model is valid.</returns>
+    /// <exception cref="OperationCanceledException">Thrown when <paramref name="cancellationToken"/> is canceled.</exception>
+    public static Task<IReadOnlyList<ValidationIssue>> ValidateAsync(
+        NodelistProject cpj,
+        CancellationToken cancellationToken = default)
+    {
+        ThrowIfNull(cpj, nameof(cpj));
+
+        return Task.Run<IReadOnlyList<ValidationIssue>>(() => ValidateCpjCore(cpj, cancellationToken), cancellationToken);
+    }
+
+    private static ReadOnlyCollection<ValidationIssue> ValidateEdsCore(
+        ElectronicDataSheet eds,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var issues = new List<ValidationIssue>();
+        ValidateDeviceInfo(eds.DeviceInfo, issues);
+        ValidateObjectDictionary(eds.ObjectDictionary, issues, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (eds.ApplicationProcess != null)
+            ValidateApplicationProcess(eds.ApplicationProcess, "ApplicationProcess", issues, cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return new ReadOnlyCollection<ValidationIssue>(issues);
+    }
+
+    private static ReadOnlyCollection<ValidationIssue> ValidateDcfCore(
+        DeviceConfigurationFile dcf,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var issues = new List<ValidationIssue>();
+        ValidateDeviceInfo(dcf.DeviceInfo, issues);
+        ValidateObjectDictionary(dcf.ObjectDictionary, issues, cancellationToken);
+        ValidateDeviceCommissioning(dcf.DeviceCommissioning, issues);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (dcf.ApplicationProcess != null)
+            ValidateApplicationProcess(dcf.ApplicationProcess, "ApplicationProcess", issues, cancellationToken);
+
+        cancellationToken.ThrowIfCancellationRequested();
+        return new ReadOnlyCollection<ValidationIssue>(issues);
+    }
+
+    private static ReadOnlyCollection<ValidationIssue> ValidateCpjCore(
+        NodelistProject cpj,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var issues = new List<ValidationIssue>();
         for (var networkIndex = 0; networkIndex < cpj.Networks.Count; networkIndex++)
-            ValidateNetworkTopology(cpj.Networks[networkIndex], "Networks[" + networkIndex.ToString(CultureInfo.InvariantCulture) + "]", issues);
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            ValidateNetworkTopology(
+                cpj.Networks[networkIndex],
+                "Networks[" + networkIndex.ToString(CultureInfo.InvariantCulture) + "]",
+                issues,
+                cancellationToken);
+        }
 
+        cancellationToken.ThrowIfCancellationRequested();
         return new ReadOnlyCollection<ValidationIssue>(issues);
     }
 
@@ -137,7 +227,8 @@ public static class CanOpenModelValidator
 
     private static void ValidateObjectDictionary(
         ObjectDictionary objectDictionary,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         var classifiedIndices = new HashSet<ushort>();
 
@@ -146,27 +237,32 @@ public static class CanOpenModelValidator
             "ObjectDictionary.MandatoryObjects",
             objectDictionary.Objects,
             classifiedIndices,
-            issues);
+            issues,
+            cancellationToken);
         ValidateObjectList(
             objectDictionary.OptionalObjects,
             "ObjectDictionary.OptionalObjects",
             objectDictionary.Objects,
             classifiedIndices,
-            issues);
+            issues,
+            cancellationToken);
         ValidateObjectList(
             objectDictionary.ManufacturerObjects,
             "ObjectDictionary.ManufacturerObjects",
             objectDictionary.Objects,
             classifiedIndices,
-            issues);
+            issues,
+            cancellationToken);
 
         foreach (var kvp in objectDictionary.Objects)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ValidateObject(kvp.Key, kvp.Value, issues);
         }
 
         foreach (var index in objectDictionary.Objects.Keys)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (!classifiedIndices.Contains(index))
             {
                 issues.Add(new ValidationIssue(
@@ -183,11 +279,13 @@ public static class CanOpenModelValidator
         string listPath,
         Dictionary<ushort, CanOpenObject> objects,
         HashSet<ushort> classifiedIndices,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         var seenInCurrentList = new HashSet<ushort>();
         foreach (var index in indexes)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var hexIndex = string.Format(CultureInfo.InvariantCulture, "0x{0:X4}", index);
             if (!seenInCurrentList.Add(index))
             {
@@ -272,13 +370,15 @@ public static class CanOpenModelValidator
     private static void ValidateNetworkTopology(
         NetworkTopology network,
         string path,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         ValidateMaxLength(network.NetName, MaxNetworkNameLength, path + ".NetName", issues);
         ValidateMaxLength(network.NetRefd, MaxReferenceNameLength, path + ".NetRefd", issues);
 
         foreach (var kvp in network.Nodes)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var nodePath = string.Format(
                 CultureInfo.InvariantCulture,
                 "{0}.Nodes[{1}]",
@@ -324,8 +424,11 @@ public static class CanOpenModelValidator
     private static void ValidateApplicationProcess(
         ApplicationProcess applicationProcess,
         string path,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
+        cancellationToken.ThrowIfCancellationRequested();
+
         var allUniqueIds = new HashSet<string>(StringComparer.Ordinal);
         var dataTypeIds = new HashSet<string>(StringComparer.Ordinal);
         var parameterTemplateIds = new HashSet<string>(StringComparer.Ordinal);
@@ -338,7 +441,8 @@ public static class CanOpenModelValidator
                 path + ".DataTypeList",
                 allUniqueIds,
                 dataTypeIds,
-                issues);
+                issues,
+                cancellationToken);
         }
 
         if (applicationProcess.TemplateList != null)
@@ -348,16 +452,19 @@ public static class CanOpenModelValidator
                 path + ".TemplateList",
                 allUniqueIds,
                 dataTypeIds,
-                issues);
+                issues,
+                cancellationToken);
 
             foreach (var template in applicationProcess.TemplateList.ParameterTemplates)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!string.IsNullOrEmpty(template.UniqueId))
                     parameterTemplateIds.Add(template.UniqueId);
             }
 
             foreach (var template in applicationProcess.TemplateList.AllowedValuesTemplates)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 if (!string.IsNullOrEmpty(template.UniqueId))
                     allowedValuesTemplateIds.Add(template.UniqueId);
             }
@@ -365,8 +472,20 @@ public static class CanOpenModelValidator
 
         // Two passes over FunctionTypeList: function-instance lists may forward-reference
         // function-type IDs, so all IDs must be registered before instances are validated.
-        var functionTypeIds = RegisterFunctionTypeIds(applicationProcess, path, allUniqueIds, dataTypeIds, issues);
-        ValidateFunctionTypeInstances(applicationProcess, path, functionTypeIds, allUniqueIds, issues);
+        var functionTypeIds = RegisterFunctionTypeIds(
+            applicationProcess,
+            path,
+            allUniqueIds,
+            dataTypeIds,
+            issues,
+            cancellationToken);
+        ValidateFunctionTypeInstances(
+            applicationProcess,
+            path,
+            functionTypeIds,
+            allUniqueIds,
+            issues,
+            cancellationToken);
 
         var parameterIds = ValidateParameters(
             applicationProcess,
@@ -375,9 +494,16 @@ public static class CanOpenModelValidator
             dataTypeIds,
             parameterTemplateIds,
             allowedValuesTemplateIds,
-            issues);
+            issues,
+            cancellationToken);
 
-        ValidateParameterGroups(applicationProcess, path, allUniqueIds, parameterIds, issues);
+        ValidateParameterGroups(
+            applicationProcess,
+            path,
+            allUniqueIds,
+            parameterIds,
+            issues,
+            cancellationToken);
 
         if (applicationProcess.FunctionInstanceList != null)
         {
@@ -386,7 +512,8 @@ public static class CanOpenModelValidator
                 path + ".FunctionInstanceList",
                 functionTypeIds,
                 allUniqueIds,
-                issues);
+                issues,
+                cancellationToken);
         }
     }
 
@@ -400,11 +527,13 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> allUniqueIds,
         HashSet<string> dataTypeIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         var functionTypeIds = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < applicationProcess.FunctionTypeList.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var functionType = applicationProcess.FunctionTypeList[index];
             var functionTypePath = IndexedPath(path + ".FunctionTypeList", index);
             RegisterUniqueId(functionType.UniqueId, functionTypePath + ".UniqueId", allUniqueIds, issues);
@@ -425,7 +554,8 @@ public static class CanOpenModelValidator
                     functionTypePath + ".InterfaceList",
                     allUniqueIds,
                     dataTypeIds,
-                    issues);
+                    issues,
+                    cancellationToken);
             }
         }
 
@@ -442,10 +572,12 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> functionTypeIds,
         HashSet<string> allUniqueIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         for (var index = 0; index < applicationProcess.FunctionTypeList.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var functionType = applicationProcess.FunctionTypeList[index];
             if (functionType.FunctionInstanceList != null)
             {
@@ -455,7 +587,8 @@ public static class CanOpenModelValidator
                     functionTypePath + ".FunctionInstanceList",
                     functionTypeIds,
                     allUniqueIds,
-                    issues);
+                    issues,
+                    cancellationToken);
             }
         }
     }
@@ -472,11 +605,13 @@ public static class CanOpenModelValidator
         HashSet<string> dataTypeIds,
         HashSet<string> parameterTemplateIds,
         HashSet<string> allowedValuesTemplateIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         var parameterIds = new HashSet<string>(StringComparer.Ordinal);
         for (var index = 0; index < applicationProcess.ParameterList.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var parameter = applicationProcess.ParameterList[index];
             var parameterPath = IndexedPath(path + ".ParameterList", index);
             RegisterUniqueId(
@@ -515,16 +650,19 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> allUniqueIds,
         HashSet<string> parameterIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         for (var index = 0; index < applicationProcess.ParameterGroupList.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ValidateParameterGroup(
                 applicationProcess.ParameterGroupList[index],
                 IndexedPath(path + ".ParameterGroupList", index),
                 allUniqueIds,
                 parameterIds,
-                issues);
+                issues,
+                cancellationToken);
         }
     }
 
@@ -533,10 +671,12 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> allUniqueIds,
         HashSet<string> dataTypeIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         for (var index = 0; index < dataTypeList.Arrays.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var arrayType = dataTypeList.Arrays[index];
             var arrayPath = IndexedPath(path + ".Arrays", index);
             RegisterUniqueId(arrayType.UniqueId, arrayPath + ".UniqueId", allUniqueIds, issues);
@@ -546,6 +686,7 @@ public static class CanOpenModelValidator
 
         for (var index = 0; index < dataTypeList.Structs.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var structType = dataTypeList.Structs[index];
             var structPath = IndexedPath(path + ".Structs", index);
             RegisterUniqueId(structType.UniqueId, structPath + ".UniqueId", allUniqueIds, issues);
@@ -555,6 +696,7 @@ public static class CanOpenModelValidator
 
         for (var index = 0; index < dataTypeList.Enums.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var enumType = dataTypeList.Enums[index];
             var enumPath = IndexedPath(path + ".Enums", index);
             RegisterUniqueId(enumType.UniqueId, enumPath + ".UniqueId", allUniqueIds, issues);
@@ -564,6 +706,7 @@ public static class CanOpenModelValidator
 
         for (var index = 0; index < dataTypeList.Derived.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var derivedType = dataTypeList.Derived[index];
             var derivedPath = IndexedPath(path + ".Derived", index);
             RegisterUniqueId(derivedType.UniqueId, derivedPath + ".UniqueId", allUniqueIds, issues);
@@ -582,6 +725,7 @@ public static class CanOpenModelValidator
 
         for (var index = 0; index < dataTypeList.Arrays.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var arrayType = dataTypeList.Arrays[index];
             var arrayPath = IndexedPath(path + ".Arrays", index);
             ValidateDataTypeRef(arrayType.ElementType, arrayPath + ".ElementType", dataTypeIds, issues);
@@ -589,16 +733,19 @@ public static class CanOpenModelValidator
 
         for (var index = 0; index < dataTypeList.Structs.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ValidateVarDeclarations(
                 dataTypeList.Structs[index].VarDeclarations,
                 IndexedPath(path + ".Structs", index) + ".VarDeclarations",
                 allUniqueIds,
                 dataTypeIds,
-                issues);
+                issues,
+                cancellationToken);
         }
 
         for (var index = 0; index < dataTypeList.Derived.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var derivedPath = IndexedPath(path + ".Derived", index);
             ValidateDataTypeRef(
                 dataTypeList.Derived[index].BaseType,
@@ -613,10 +760,12 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> allUniqueIds,
         HashSet<string> dataTypeIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         for (var index = 0; index < templateList.ParameterTemplates.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var template = templateList.ParameterTemplates[index];
             var templatePath = IndexedPath(path + ".ParameterTemplates", index);
             RegisterUniqueId(template.UniqueId, templatePath + ".UniqueId", allUniqueIds, issues);
@@ -625,6 +774,7 @@ public static class CanOpenModelValidator
 
         for (var index = 0; index < templateList.AllowedValuesTemplates.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var template = templateList.AllowedValuesTemplates[index];
             var templatePath = IndexedPath(path + ".AllowedValuesTemplates", index);
             RegisterUniqueId(template.UniqueId, templatePath + ".UniqueId", allUniqueIds, issues);
@@ -636,11 +786,12 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> allUniqueIds,
         HashSet<string> dataTypeIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
-        ValidateVarDeclarations(interfaceList.InputVars, path + ".InputVars", allUniqueIds, dataTypeIds, issues);
-        ValidateVarDeclarations(interfaceList.OutputVars, path + ".OutputVars", allUniqueIds, dataTypeIds, issues);
-        ValidateVarDeclarations(interfaceList.ConfigVars, path + ".ConfigVars", allUniqueIds, dataTypeIds, issues);
+        ValidateVarDeclarations(interfaceList.InputVars, path + ".InputVars", allUniqueIds, dataTypeIds, issues, cancellationToken);
+        ValidateVarDeclarations(interfaceList.OutputVars, path + ".OutputVars", allUniqueIds, dataTypeIds, issues, cancellationToken);
+        ValidateVarDeclarations(interfaceList.ConfigVars, path + ".ConfigVars", allUniqueIds, dataTypeIds, issues, cancellationToken);
     }
 
     private static void ValidateVarDeclarations(
@@ -648,10 +799,12 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> allUniqueIds,
         HashSet<string> dataTypeIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         for (var index = 0; index < varDeclarations.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var varDeclaration = varDeclarations[index];
             var varPath = IndexedPath(path, index);
             RegisterUniqueId(varDeclaration.UniqueId, varPath + ".UniqueId", allUniqueIds, issues);
@@ -718,12 +871,14 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> allUniqueIds,
         HashSet<string> parameterIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         RegisterUniqueId(group.UniqueId, path + ".UniqueId", allUniqueIds, issues);
 
         foreach (var parameterRef in group.ParameterRefs)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             if (string.IsNullOrEmpty(parameterRef))
             {
                 issues.Add(new ValidationIssue(path + ".ParameterRefs", "Parameter reference must not be empty."));
@@ -740,12 +895,14 @@ public static class CanOpenModelValidator
 
         for (var index = 0; index < group.SubGroups.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             ValidateParameterGroup(
                 group.SubGroups[index],
                 IndexedPath(path + ".SubGroups", index),
                 allUniqueIds,
                 parameterIds,
-                issues);
+                issues,
+                cancellationToken);
         }
     }
 
@@ -754,10 +911,12 @@ public static class CanOpenModelValidator
         string path,
         HashSet<string> functionTypeIds,
         HashSet<string> allUniqueIds,
-        List<ValidationIssue> issues)
+        List<ValidationIssue> issues,
+        CancellationToken cancellationToken = default)
     {
         for (var index = 0; index < instanceList.FunctionInstances.Count; index++)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             var instance = instanceList.FunctionInstances[index];
             var instancePath = IndexedPath(path + ".FunctionInstances", index);
             RegisterUniqueId(instance.UniqueId, instancePath + ".UniqueId", allUniqueIds, issues);

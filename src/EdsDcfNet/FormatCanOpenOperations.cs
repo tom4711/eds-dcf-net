@@ -18,6 +18,18 @@ public class FormatCanOpenOperations<TModel>
     protected delegate void EnsureValidForWriteCallback(TModel model, CanOpenWriteOptions? options);
 
     /// <summary>
+    /// Validates <paramref name="model"/> asynchronously before a write operation when
+    /// <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/> is enabled.
+    /// </summary>
+    /// <param name="model">Model about to be written.</param>
+    /// <param name="options">Write options; <see langword="null"/> means default (no validation).</param>
+    /// <param name="cancellationToken">Cancellation token for aborting validation.</param>
+    protected delegate Task EnsureValidForWriteAsyncCallback(
+        TModel model,
+        CanOpenWriteOptions? options,
+        CancellationToken cancellationToken);
+
+    /// <summary>
     /// Reads a model from a file on disk.
     /// </summary>
     /// <param name="filePath">Path to the input file.</param>
@@ -91,6 +103,7 @@ public class FormatCanOpenOperations<TModel>
     protected delegate string WriteToStringCallback(TModel model);
 
     private readonly EnsureValidForWriteCallback _ensureValidForWrite;
+    private readonly EnsureValidForWriteAsyncCallback? _ensureValidForWriteAsync;
     private readonly ReadFileCallback _readFile;
     private readonly ReadFileAsyncCallback _readFileAsync;
     private readonly ReadStringCallback _readString;
@@ -123,8 +136,43 @@ public class FormatCanOpenOperations<TModel>
         Func<TModel, string, CancellationToken, Task> writeFileAsync,
         Func<TModel, Stream, CancellationToken, Task> writeStreamAsync,
         Func<TModel, string> writeToString)
+        : this(
+            ensureValidForWrite,
+            readFile,
+            readFileAsync,
+            readString,
+            readStream,
+            readStreamAsync,
+            writeFile,
+            writeStream,
+            writeFileAsync,
+            writeStreamAsync,
+            writeToString,
+            ensureValidForWriteAsync: null)
+    {
+    }
+
+    /// <summary>
+    /// Initializes format-specific read/write delegates, including an optional async validation delegate.
+    /// </summary>
+    protected FormatCanOpenOperations(
+        Action<TModel, CanOpenWriteOptions?> ensureValidForWrite,
+        Func<string, long, TModel> readFile,
+        Func<string, long, CancellationToken, Task<TModel>> readFileAsync,
+        Func<string, long, TModel> readString,
+        Func<Stream, long, TModel> readStream,
+        Func<Stream, long, CancellationToken, Task<TModel>> readStreamAsync,
+        Action<TModel, string> writeFile,
+        Action<TModel, Stream> writeStream,
+        Func<TModel, string, CancellationToken, Task> writeFileAsync,
+        Func<TModel, Stream, CancellationToken, Task> writeStreamAsync,
+        Func<TModel, string> writeToString,
+        Func<TModel, CanOpenWriteOptions?, CancellationToken, Task>? ensureValidForWriteAsync)
     {
         _ensureValidForWrite = new EnsureValidForWriteCallback(ensureValidForWrite);
+        _ensureValidForWriteAsync = ensureValidForWriteAsync != null
+            ? new EnsureValidForWriteAsyncCallback(ensureValidForWriteAsync)
+            : null;
         _readFile = new ReadFileCallback(readFile);
         _readFileAsync = new ReadFileAsyncCallback(readFileAsync);
         _readString = new ReadStringCallback(readString);
@@ -219,19 +267,20 @@ public class FormatCanOpenOperations<TModel>
         => WriteFileAsync(model, filePath, options: null, cancellationToken);
 
     /// <summary>
-    /// Writes to disk asynchronously.
+    /// Writes to disk asynchronously. When <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/>
+    /// is enabled, validation also runs asynchronously and honors <paramref name="cancellationToken"/>.
     /// </summary>
     /// <exception cref="ModelValidationException">
     /// Thrown when <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/> is enabled and the model has validation issues.
     /// </exception>
-    public virtual Task WriteFileAsync(
+    public virtual async Task WriteFileAsync(
         TModel model,
         string filePath,
         CanOpenWriteOptions? options,
         CancellationToken cancellationToken = default)
     {
-        _ensureValidForWrite(model, options);
-        return _writeFileAsync(model, filePath, cancellationToken);
+        await EnsureValidForWriteAsync(model, options, cancellationToken).ConfigureAwait(false);
+        await _writeFileAsync(model, filePath, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -244,19 +293,35 @@ public class FormatCanOpenOperations<TModel>
         => WriteStreamAsync(model, stream, options: null, cancellationToken);
 
     /// <summary>
-    /// Writes to a stream asynchronously. The stream is not disposed.
+    /// Writes to a stream asynchronously. The stream is not disposed. When
+    /// <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/> is enabled, validation also
+    /// runs asynchronously and honors <paramref name="cancellationToken"/>.
     /// </summary>
     /// <exception cref="ModelValidationException">
     /// Thrown when <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/> is enabled and the model has validation issues.
     /// </exception>
-    public virtual Task WriteStreamAsync(
+    public virtual async Task WriteStreamAsync(
         TModel model,
         Stream stream,
         CanOpenWriteOptions? options,
         CancellationToken cancellationToken = default)
     {
-        _ensureValidForWrite(model, options);
-        return _writeStreamAsync(model, stream, cancellationToken);
+        await EnsureValidForWriteAsync(model, options, cancellationToken).ConfigureAwait(false);
+        await _writeStreamAsync(model, stream, cancellationToken).ConfigureAwait(false);
+    }
+
+    private Task EnsureValidForWriteAsync(
+        TModel model,
+        CanOpenWriteOptions? options,
+        CancellationToken cancellationToken)
+    {
+        if (options?.ValidateBeforeWrite != true)
+            return Task.CompletedTask;
+
+        if (_ensureValidForWriteAsync != null)
+            return _ensureValidForWriteAsync(model, options, cancellationToken);
+
+        return Task.Run(() => _ensureValidForWrite(model, options), cancellationToken);
     }
 
     /// <summary>
