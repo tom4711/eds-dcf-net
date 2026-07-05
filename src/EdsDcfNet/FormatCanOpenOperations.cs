@@ -267,7 +267,8 @@ public class FormatCanOpenOperations<TModel>
 
     /// <summary>
     /// Writes to disk asynchronously. When <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/>
-    /// is enabled, validation also runs asynchronously and honors <paramref name="cancellationToken"/>. 
+    /// is enabled, validation runs synchronously before I/O so
+    /// <see cref="ModelValidationException"/> is thrown at the call site.
     /// </summary>
     /// <exception cref="ModelValidationException">
     /// Thrown when <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/> is enabled and the model has validation issues.
@@ -278,7 +279,12 @@ public class FormatCanOpenOperations<TModel>
         CanOpenWriteOptions? options,
         CancellationToken cancellationToken = default)
     {
-        await EnsureValidForWriteAsync(model, options, cancellationToken).ConfigureAwait(false);
+        // Validierung synchron ausführen (wie in 1.9.x) – Exceptions werden
+        // sofort am Aufrufpunkt geworfen, nicht auf dem Task.
+        // Delegates werden immer aufgerufen (PR #380 Kompatibilität)
+        cancellationToken.ThrowIfCancellationRequested();
+        _ensureValidForWrite(model, options);
+
         await _writeFileAsync(model, filePath, cancellationToken).ConfigureAwait(false);
     }
 
@@ -293,8 +299,8 @@ public class FormatCanOpenOperations<TModel>
 
     /// <summary>
     /// Writes to a stream asynchronously. The stream is not disposed. When
-    /// <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/> is enabled, validation also
-    /// runs asynchronously and honors <paramref name="cancellationToken"/>. 
+    /// <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/> is enabled, validation runs
+    /// synchronously before I/O so <see cref="ModelValidationException"/> is thrown at the call site.
     /// </summary>
     /// <exception cref="ModelValidationException">
     /// Thrown when <see cref="CanOpenWriteOptions.ValidateBeforeWrite"/> is enabled and the model has validation issues.
@@ -305,7 +311,11 @@ public class FormatCanOpenOperations<TModel>
         CanOpenWriteOptions? options,
         CancellationToken cancellationToken = default)
     {
-        await EnsureValidForWriteAsync(model, options, cancellationToken).ConfigureAwait(false);
+        // Validierung synchron ausführen (wie in 1.9.x)
+        // Delegates werden immer aufgerufen (PR #380 Kompatibilität)
+        cancellationToken.ThrowIfCancellationRequested();
+        _ensureValidForWrite(model, options);
+
         await _writeStreamAsync(model, stream, cancellationToken).ConfigureAwait(false);
     }
 
